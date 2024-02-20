@@ -244,7 +244,7 @@ bool _pointOnCut(Offset point, Offset tail, Offset head) {
   final distance = cross.abs() / vTailHead.length;
 
   // Точка лежит между tail и head && на расстоянии толщины отрезка + погрешность
-  if (dot <= 0 && distance <= kWallWidth + kInaccuracy) return true;
+  if (dot <= 0 && distance <= kWallWidth * 2) return true;
   return false;
 }
 

@@ -7,6 +7,8 @@ import 'package:rooms_painter/presentation/notifiers.dart';
 import 'package:rooms_painter/presentation/styles.dart';
 import 'package:rooms_painter/presentation/widgets.dart';
 
+import 'constants.dart';
+
 void main() => runApp(const ProviderScope(child: MyApp()));
 
 class MyApp extends StatelessWidget {
@@ -121,59 +123,59 @@ class RoomPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (closed) fillRoom(canvas);
-    drawWall(canvas);
+    if (points.isNotEmpty) drawRoom(canvas);
     drawPoint(canvas);
   }
 
-  void drawWall(Canvas canvas) {
-    final linePaint = Paint()
+  void drawRoom(Canvas canvas) {
+    final path = Path();
+
+    final wallsPaint = Paint()
+      ..style = PaintingStyle.stroke
       ..color = Colors.black
       ..strokeWidth = kWallWidth
       ..strokeCap = StrokeCap.round;
 
-    final textPainter = TextPainter(
-      textDirection: TextDirection.ltr,
-      textAlign: TextAlign.center,
-    );
+    if (closed) fillRoom(canvas);
 
     for (int i = 0; i < points.length - 1; i++) {
       final start = points[i];
       final finish = points[i + 1];
-      canvas.drawLine(start, finish, linePaint);
-      double? prevDirection;
-      double? nextDirection;
-      if (closed) {
-        prevDirection = (start - points[(i - 1) % points.length]).direction;
-        nextDirection = (points[(i + 2) % points.length] - finish).direction;
-      }
+      path.moveTo(start.dx, start.dy);
+      path.lineTo(finish.dx, finish.dy);
       drawLength(
         canvas: canvas,
         line: (start: start, finish: finish),
-        textPainter: textPainter,
-        prevDirection: prevDirection,
-        nextDirection: nextDirection,
       );
     }
+    canvas.drawPath(path, wallsPaint);
+  }
+
+  void fillRoom(Canvas canvas) {
+    final fillPaint = Paint()
+      ..style = PaintingStyle.fill
+      ..color = Colors.white;
+    final Path filledArea = Path();
+    filledArea.addPolygon(points, closed);
+    canvas.drawPath(filledArea, fillPaint);
   }
 
   void drawLength({
     required Canvas canvas,
     required ({Offset start, Offset finish}) line,
-    required TextPainter textPainter,
-    double? prevDirection,
-    double? nextDirection,
   }) {
-    const textStyle = TextStyle(color: kVerticesBorderColor, fontSize: 14.0);
+    final textPainter = TextPainter(
+      textDirection: TextDirection.ltr,
+      textAlign: TextAlign.center,
+    );
 
     final (start, finish) = (line.start, line.finish);
     final length = (finish - start).distance;
     double angle = (finish - start).direction;
-    print(angle);
 
     textPainter.text = TextSpan(
-      text: '${length.toStringAsFixed(1)} м.',
-      style: textStyle,
+      text: '${(length * kWallLengthScale).toStringAsFixed(2)} м.',
+      style: kLengthTextStyle,
     );
 
     textPainter.layout();
@@ -182,37 +184,34 @@ class RoomPainter extends CustomPainter {
       (start.dy + finish.dy) / 2,
     );
 
-    Offset startText = lineCenter.translate(
-      -textPainter.width / 2,
-      // todo в зависимости от next и prev направлений менять знак на + ли -
-      -textPainter.height - 7,
-    );
+    final orientation = getPolygonDirection();
+    final yShift = switch (orientation) {
+      PolygonDirection.clockwise => -(textPainter.height + kWallWidth),
+      PolygonDirection.counterclockwise => kWallWidth
+    };
+
+    Offset startText = lineCenter.translate(-textPainter.width / 2, yShift);
 
     // что бы текст не был вверх ногами
-    if (angle >= pi / 2 && angle <= pi ||
-        angle >= -pi && angle <= -(3 * pi / 4)) {
+    if (angle >= pi / 2 && angle <= pi || angle >= -pi && angle <= -pi / 2) {
       angle += pi;
+      startText = startText.translate(
+        0,
+        orientation == PolygonDirection.clockwise
+            ? textPainter.height + 2 * kWallWidth
+            : -(textPainter.height + 2 * kWallWidth),
+      );
     }
 
-    // Rotate the text about lineCenter
     canvas.save();
+
     canvas.translate(lineCenter.dx, lineCenter.dy);
     canvas.rotate(angle);
     canvas.translate(-lineCenter.dx, -lineCenter.dy);
-    textPainter.paint(canvas, startText);
-    canvas.restore();
-  }
 
-  void fillRoom(Canvas canvas) {
-    final path = Path();
-    final pathPaint = Paint()
-      ..style = PaintingStyle.fill
-      ..color = Colors.white;
-    path.moveTo(points[0].dx, points[0].dy);
-    for (int i = 1; i < points.length; i++) {
-      path.lineTo(points[i].dx, points[i].dy);
-    }
-    canvas.drawPath(path, pathPaint);
+    textPainter.paint(canvas, startText);
+
+    canvas.restore();
   }
 
   void drawPoint(Canvas canvas) {
@@ -234,4 +233,29 @@ class RoomPainter extends CustomPainter {
     return !listEquals(oldDelegate.points, points) ||
         oldDelegate.closed != closed;
   }
+
+  PolygonDirection getPolygonDirection() {
+    if (points.length < 3) return PolygonDirection.clockwise;
+
+    double orientation = 0;
+
+    for (int i = 0; i < points.length - 2; i++) {
+      final cur = points[i];
+      final next1 = points[i + 1];
+      final next2 = points[i + 2];
+
+      orientation += (next1.dx - cur.dx) * (next2.dy - next1.dy) -
+          (next2.dx - next1.dx) * (next1.dy - cur.dy);
+    }
+
+    if (orientation > 0) {
+      return PolygonDirection.clockwise;
+    } else if (orientation < 0) {
+      return PolygonDirection.counterclockwise;
+    } else {
+      return PolygonDirection.clockwise;
+    }
+  }
 }
+
+enum PolygonDirection { clockwise, counterclockwise }
