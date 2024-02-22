@@ -99,6 +99,7 @@ class _MyHomePageState extends ConsumerState<MyHomePage> {
               foregroundPainter: RoomPainter(
                 points: points,
                 closed: pointsNotifier.isClosed(),
+                polygonDirection: pointsNotifier.getPolygonDirection(),
               ),
             ),
           ),
@@ -118,8 +119,13 @@ class _MyHomePageState extends ConsumerState<MyHomePage> {
 class RoomPainter extends CustomPainter {
   final List<Offset> points;
   final bool closed;
+  final PolygonDirection polygonDirection;
 
-  const RoomPainter({required this.points, required this.closed});
+  const RoomPainter({
+    required this.points,
+    required this.closed,
+    required this.polygonDirection,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -184,8 +190,7 @@ class RoomPainter extends CustomPainter {
       (start.dy + finish.dy) / 2,
     );
 
-    final orientation = getPolygonDirection();
-    final yShift = switch (orientation) {
+    final yShift = switch (polygonDirection) {
       PolygonDirection.clockwise => -(textPainter.height + kWallWidth),
       PolygonDirection.counterclockwise => kWallWidth
     };
@@ -197,7 +202,7 @@ class RoomPainter extends CustomPainter {
       angle += pi;
       startText = startText.translate(
         0,
-        orientation == PolygonDirection.clockwise
+        polygonDirection == PolygonDirection.clockwise
             ? textPainter.height + 2 * kWallWidth
             : -(textPainter.height + 2 * kWallWidth),
       );
@@ -233,29 +238,4 @@ class RoomPainter extends CustomPainter {
     return !listEquals(oldDelegate.points, points) ||
         oldDelegate.closed != closed;
   }
-
-  PolygonDirection getPolygonDirection() {
-    if (points.length < 3) return PolygonDirection.clockwise;
-
-    double orientation = 0;
-
-    for (int i = 0; i < points.length - 2; i++) {
-      final cur = points[i];
-      final next1 = points[i + 1];
-      final next2 = points[i + 2];
-
-      orientation += (next1.dx - cur.dx) * (next2.dy - next1.dy) -
-          (next2.dx - next1.dx) * (next1.dy - cur.dy);
-    }
-
-    if (orientation > 0) {
-      return PolygonDirection.clockwise;
-    } else if (orientation < 0) {
-      return PolygonDirection.counterclockwise;
-    } else {
-      return PolygonDirection.clockwise;
-    }
-  }
 }
-
-enum PolygonDirection { clockwise, counterclockwise }

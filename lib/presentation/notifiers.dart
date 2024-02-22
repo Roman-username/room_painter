@@ -9,6 +9,8 @@ part 'notifiers.g.dart';
 
 typedef Cut = ({Offset tail, Offset head});
 
+enum PolygonDirection { clockwise, counterclockwise }
+
 @riverpod
 class PointsNotifier extends _$PointsNotifier {
   @override
@@ -33,8 +35,7 @@ class PointsNotifier extends _$PointsNotifier {
         (tail: tail2, head: head2),
       );
 
-      if (interPoint == null) continue;
-      return interPoint;
+      if (interPoint != null) return interPoint;
     }
     return null;
   }
@@ -96,14 +97,22 @@ class PointsNotifier extends _$PointsNotifier {
     int vertexIdx,
     List<Offset> points,
   ) {
-    Offset tail11 = points[(vertexIdx - 1) % points.length];
-    Offset tail12 = points[(vertexIdx + 1) % points.length];
+    int tail11Idx = vertexIdx - 1 >= 0
+        ? vertexIdx - 1
+        : ((vertexIdx - 1) % points.length - 1);
+    Offset tail11 = points[tail11Idx];
+    final tail12Idx = vertexIdx + 1 <= points.length - 1
+        ? vertexIdx + 1
+        : (vertexIdx + 1) % points.length + 1;
+    Offset tail12 = points[tail12Idx];
 
     Offset? intersectionPoint1;
     Offset? intersectionPoint2;
 
     // Проверяем первое ребро вершины
-    for (int i = points.length - 2; i >= 0; i--) {
+    int startIdx = vertexIdx == 0 || vertexIdx == points.length - 1 ? 1 : 0;
+    for (int i = startIdx; i < points.length - 1; i++) {
+      // проверка не является начало и конец вектора одной точкой
       final tail2 = points[i];
       final head2 = points[i + 1];
 
@@ -126,7 +135,7 @@ class PointsNotifier extends _$PointsNotifier {
     }
 
     // Проверяем второе ребро вершины
-    for (int i = points.length - 2; i >= 0; i--) {
+    for (int i = startIdx; i < points.length - 1; i++) {
       final tail2 = points[i];
       final head2 = points[i + 1];
 
@@ -162,47 +171,7 @@ class PointsNotifier extends _$PointsNotifier {
       points,
     );
     if (interPoint1 == null && interPoint2 == null) return point;
-
-    const allowRadius = (kWallWidth + kVertexRadius) / 2;
-
-    if (interPoint1 != null && interPoint2 != null) {
-      double x = interPoint1.dx - (interPoint1.dx - interPoint2.dx) / 2;
-      double y = interPoint1.dy - (interPoint1.dy - interPoint2.dy) / 2;
-      final prevPoint = points[(vertexIdx - 1) % points.length];
-      final nextPoint = points[(vertexIdx + 1) % points.length];
-
-      if (prevPoint.dx > x) x += allowRadius;
-      if (prevPoint.dx < x) x -= allowRadius;
-      if (prevPoint.dy > y) y += allowRadius;
-      if (prevPoint.dy < y) y -= allowRadius;
-
-      if (nextPoint.dx > x) x += allowRadius;
-      if (nextPoint.dx < x) x -= allowRadius;
-      if (nextPoint.dy > y) y += allowRadius;
-      if (nextPoint.dy < y) y -= allowRadius;
-
-      return Offset(x, y);
-    }
-
-    // Если есть только одна точка пересечения
-    Offset intersectionPoint = interPoint1 ?? interPoint2!;
-
-    final prevPoint = points[(vertexIdx - 1) % points.length];
-    final nextPoint = points[(vertexIdx + 1) % points.length];
-
-    double x = intersectionPoint.dx;
-    if (prevPoint.dx > intersectionPoint.dx) x += allowRadius;
-    if (prevPoint.dx < intersectionPoint.dx) x -= allowRadius;
-    double y = intersectionPoint.dy;
-    if (prevPoint.dy > intersectionPoint.dy) y += allowRadius;
-    if (prevPoint.dy < intersectionPoint.dy) y -= allowRadius;
-
-    if (nextPoint.dx > intersectionPoint.dx) x += allowRadius;
-    if (nextPoint.dx < intersectionPoint.dx) x -= allowRadius;
-    if (nextPoint.dy > intersectionPoint.dy) y += allowRadius;
-    if (nextPoint.dy < intersectionPoint.dy) y -= allowRadius;
-
-    return Offset(x, y);
+    return null;
   }
 
   void moveVertex({required int vertexIdx, required Offset to}) {
@@ -228,6 +197,29 @@ class PointsNotifier extends _$PointsNotifier {
   void clear() => state = [];
 
   bool isClosed() => state.length > 1 && state.first == state.last;
+
+  PolygonDirection getPolygonDirection() {
+    if (state.length < 3) return PolygonDirection.clockwise;
+
+    double orientation = 0;
+
+    for (int i = 0; i < state.length - 2; i++) {
+      final cur = state[i];
+      final next1 = state[i + 1];
+      final next2 = state[i + 2];
+
+      orientation += (next1.dx - cur.dx) * (next2.dy - next1.dy) -
+          (next2.dx - next1.dx) * (next1.dy - cur.dy);
+    }
+
+    if (orientation > 0) {
+      return PolygonDirection.clockwise;
+    } else if (orientation < 0) {
+      return PolygonDirection.counterclockwise;
+    } else {
+      return PolygonDirection.clockwise;
+    }
+  }
 }
 
 bool _pointOnCut(Offset point, Offset tail, Offset head) {
